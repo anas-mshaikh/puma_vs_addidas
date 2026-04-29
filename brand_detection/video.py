@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 import cv2
 from ultralytics import YOLO
 
-from .storage import store_detections_to_postgres
+from .storage import store_detections_to_sqlite
 
 
 def is_url(value: str) -> bool:
@@ -99,8 +99,8 @@ def run_video_inference(
     imgsz: int,
     device: str | None,
     progress_callback: Callable[[int, int, int], None] | None = None,
-    postgres_dsn: str | None = None,
-    postgres_table: str = "video_detections",
+    sqlite_db_path: Path | None = None,
+    sqlite_table: str = "video_detections",
 ):
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -160,7 +160,7 @@ def run_video_inference(
 
     frame_index = 0
     detection_count = 0
-    postgres_detections: list[dict[str, object]] = []
+    sqlite_detections: list[dict[str, object]] = []
 
     print(f"Processing video: {video_path}")
     print(f"Resolution: {width}x{height}, FPS: {fps:.2f}, frames: {total_frames}")
@@ -221,8 +221,8 @@ def run_video_inference(
                     "video_path": str(video_path),
                 }
                 csv_writer.writerow(row)
-                if postgres_dsn:
-                    postgres_detections.append(row)
+                if sqlite_db_path is not None:
+                    sqlite_detections.append(row)
                 detection_count += 1
 
         writer.write(frame)
@@ -243,15 +243,15 @@ def run_video_inference(
     print(f"CSV file:        {output_csv_path}")
     print(f"Total detections: {detection_count}")
 
-    if postgres_dsn:
-        store_detections_to_postgres(
-            dsn=postgres_dsn,
-            table_name=postgres_table,
+    if sqlite_db_path is not None:
+        store_detections_to_sqlite(
+            db_path=sqlite_db_path,
+            table_name=sqlite_table,
             run_id=run_id,
             output_video_path=output_video_path,
             output_csv_path=output_csv_path,
-            detections=postgres_detections,
+            detections=sqlite_detections,
         )
-        print(f"Postgres table:   {postgres_table}")
+        print(f"SQLite database:  {sqlite_db_path}")
 
     return output_video_path, output_csv_path, detection_count, video_path

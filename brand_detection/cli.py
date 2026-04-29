@@ -32,11 +32,15 @@ def main() -> None:
         default=None,
         help="Device: cpu, mps, 0, etc. Leave empty for auto.",
     )
-    parser.add_argument("--postgres-dsn", default=None, help="Optional Postgres DSN")
     parser.add_argument(
-        "--postgres-table",
+        "--sqlite-db",
+        default="outputs/logo_inference/video_detections.sqlite3",
+        help="SQLite database path for detections.",
+    )
+    parser.add_argument(
+        "--sqlite-table",
         default="video_detections",
-        help="Postgres table for detections",
+        help="SQLite table for detections",
     )
 
     args = parser.parse_args()
@@ -50,8 +54,8 @@ def main() -> None:
             iou_threshold=args.iou,
             imgsz=args.imgsz,
             device=args.device,
-            postgres_dsn=args.postgres_dsn,
-            postgres_table=args.postgres_table,
+            sqlite_db_path=Path(args.sqlite_db),
+            sqlite_table=args.sqlite_table,
         )
     except Exception as exc:
         print(f"\nERROR: {exc}", file=sys.stderr)

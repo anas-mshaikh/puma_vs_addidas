@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import re
+import sqlite3
 from pathlib import Path
 
 
 def validate_sql_identifier(name: str) -> None:
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
         raise ValueError(
-            f"Invalid Postgres table name: {name!r}. Use letters, numbers, and underscores only."
+            f"Invalid SQLite table name: {name!r}. Use letters, numbers, and underscores only."
         )
 
 
-def store_detections_to_postgres(
-    dsn: str,
+def store_detections_to_sqlite(
+    db_path: Path,
     table_name: str,
     run_id: str,
     output_video_path: Path,
@@ -24,16 +25,16 @@ def store_detections_to_postgres(
 
     validate_sql_identifier(table_name)
 
-    import psycopg
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
     create_table_sql = f"""
         CREATE TABLE IF NOT EXISTS {table_name} (
-            id bigserial PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             run_id text NOT NULL,
             frame_index integer NOT NULL,
-            timestamp_sec double precision NOT NULL,
+            timestamp_sec real NOT NULL,
             brand text NOT NULL,
-            confidence double precision NOT NULL,
+            confidence real NOT NULL,
             x1 integer NOT NULL,
             y1 integer NOT NULL,
             x2 integer NOT NULL,
@@ -43,7 +44,7 @@ def store_detections_to_postgres(
             video_path text NOT NULL,
             output_video_path text NOT NULL,
             output_csv_path text NOT NULL,
-            created_at timestamptz NOT NULL DEFAULT now()
+            created_at text NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """
 
@@ -64,33 +65,46 @@ def store_detections_to_postgres(
             output_video_path,
             output_csv_path
         ) VALUES (
-            %(run_id)s,
-            %(frame_index)s,
-            %(timestamp_sec)s,
-            %(brand)s,
-            %(confidence)s,
-            %(x1)s,
-            %(y1)s,
-            %(x2)s,
-            %(y2)s,
-            %(box_width)s,
-            %(box_height)s,
-            %(video_path)s,
-            %(output_video_path)s,
-            %(output_csv_path)s
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?,
+            ?
         )
     """
 
-    with psycopg.connect(dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute(create_table_sql)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(create_table_sql)
 
-            enriched_rows = []
-            for row in detections:
-                enriched = dict(row)
-                enriched["run_id"] = run_id
-                enriched["output_video_path"] = str(output_video_path)
-                enriched["output_csv_path"] = str(output_csv_path)
-                enriched_rows.append(enriched)
+        rows = []
+        for row in detections:
+            rows.append(
+                (
+                    run_id,
+                    row["frame_index"],
+                    row["timestamp_sec"],
+                    row["brand"],
+                    row["confidence"],
+                    row["x1"],
+                    row["y1"],
+                    row["x2"],
+                    row["y2"],
+                    row["box_width"],
+                    row["box_height"],
+                    row["video_path"],
+                    str(output_video_path),
+                    str(output_csv_path),
+                )
+            )
 
-            cur.executemany(insert_sql, enriched_rows)
+        conn.executemany(insert_sql, rows)
+        conn.commit()

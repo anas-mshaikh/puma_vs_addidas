@@ -4,13 +4,13 @@ Adidas / Puma logo detection with:
 - balanced dataset generation
 - YOLO video inference
 - Streamlit UI
-- optional Postgres storage for detections
+- optional SQLite storage for detections
 
 ## Layout
 
 - `brand_detection/`
   - `video.py`: inference pipeline
-  - `storage.py`: Postgres persistence
+  - `storage.py`: SQLite persistence
   - `cli.py`: command-line entry point
   - `web.py`: Streamlit app
   - `data_cleaning.py`: build a cleaned Adidas/Puma dataset from raw Roboflow exports
@@ -34,10 +34,10 @@ streamlit run streamlit_app.py
 python train_yolo.py
 ```
 
-## Postgres
+## SQLite
 
-Enable Postgres in the Streamlit sidebar and provide a DSN like:
+Enable SQLite in the Streamlit sidebar and provide a database path like:
 
 ```text
-postgresql://user:password@host:5432/dbname
+outputs/streamlit_runs/video_detections.sqlite3
 ```

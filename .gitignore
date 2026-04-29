@@ -7,3 +7,5 @@ datasets/
 *png
 *.DS_Store
 outputs/
+*.mp4
+*.sqlite3
