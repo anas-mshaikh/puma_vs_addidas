@@ -1,4 +1,4 @@
-from brand_detection.training import main
+from backend.training.train import main
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from .video import run_video_inference
+from .video import is_url
 
 
 def main() -> None:
@@ -37,13 +38,10 @@ def main() -> None:
         default="outputs/logo_inference/video_detections.sqlite3",
         help="SQLite database path for detections.",
     )
-    parser.add_argument(
-        "--sqlite-table",
-        default="video_detections",
-        help="SQLite table for detections",
-    )
 
     args = parser.parse_args()
+
+    source_type = "youtube_url" if is_url(args.source) else "local_path"
 
     try:
         run_video_inference(
@@ -55,7 +53,8 @@ def main() -> None:
             imgsz=args.imgsz,
             device=args.device,
             sqlite_db_path=Path(args.sqlite_db),
-            sqlite_table=args.sqlite_table,
+            source_type=source_type,
+            source_value=args.source,
         )
     except Exception as exc:
         print(f"\nERROR: {exc}", file=sys.stderr)

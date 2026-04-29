@@ -1,4 +1,4 @@
-from brand_detection.data_cleaning import main
+from backend.data.cleaning import main
 
 
 if __name__ == "__main__":

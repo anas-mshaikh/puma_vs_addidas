@@ -1,4 +1,4 @@
-from brand_detection.cli import main
+from backend.inference.cli import main
 
 
 if __name__ == "__main__":

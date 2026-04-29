@@ -1,4 +1,4 @@
-from brand_detection.data_balancing import main
+from backend.data.balancing import main
 
 
 if __name__ == "__main__":

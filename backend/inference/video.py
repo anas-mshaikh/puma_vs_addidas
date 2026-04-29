@@ -10,7 +10,12 @@ from urllib.parse import urlparse
 import cv2
 from ultralytics import YOLO
 
-from .storage import store_detections_to_sqlite
+from .storage import (
+    add_detections,
+    create_inference_run,
+    finalize_inference_run,
+    utc_now_iso,
+)
 
 
 def is_url(value: str) -> bool:
@@ -125,7 +130,8 @@ def run_video_inference(
     device: str | None,
     progress_callback: Callable[[int, int, int], None] | None = None,
     sqlite_db_path: Path | None = None,
-    sqlite_table: str = "video_detections",
+    source_type: str | None = None,
+    source_value: str | None = None,
 ):
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -163,6 +169,24 @@ def run_video_inference(
 
     writer = create_video_writer(output_video_path, fps, width, height)
 
+    db_run_id: int | None = None
+    if sqlite_db_path is not None:
+        db_run_id = create_inference_run(
+            sqlite_db_path,
+            source_type=source_type,
+            source_value=source_value,
+            input_video_path=str(video_path),
+            model_path=str(weights),
+            confidence_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+            total_frames=total_frames,
+            fps=fps,
+            width=width,
+            height=height,
+            started_at=utc_now_iso(),
+            status="running",
+        )
+
     csv_file = output_csv_path.open("w", newline="", encoding="utf-8")
     csv_writer = csv.DictWriter(
         csv_file,
@@ -185,97 +209,111 @@ def run_video_inference(
     frame_index = 0
     detection_count = 0
     sqlite_detections: list[dict[str, object]] = []
+    inference_status = "completed"
 
     print(f"Processing video: {video_path}")
     print(f"Resolution: {width}x{height}, FPS: {fps:.2f}, frames: {total_frames}")
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
 
-        timestamp_sec = frame_index / fps
+            timestamp_sec = frame_index / fps
 
-        predict_kwargs = {
-            "source": frame,
-            "conf": conf_threshold,
-            "iou": iou_threshold,
-            "imgsz": imgsz,
-            "verbose": False,
-        }
-        if device:
-            predict_kwargs["device"] = device
+            predict_kwargs = {
+                "source": frame,
+                "conf": conf_threshold,
+                "iou": iou_threshold,
+                "imgsz": imgsz,
+                "verbose": False,
+            }
+            if device:
+                predict_kwargs["device"] = device
 
-        result = model.predict(**predict_kwargs)[0]
+            result = model.predict(**predict_kwargs)[0]
 
-        if result.boxes is not None and len(result.boxes) > 0:
-            boxes_xyxy = result.boxes.xyxy.cpu().numpy()
-            confidences = result.boxes.conf.cpu().numpy()
-            class_ids = result.boxes.cls.cpu().numpy().astype(int)
+            if result.boxes is not None and len(result.boxes) > 0:
+                boxes_xyxy = result.boxes.xyxy.cpu().numpy()
+                confidences = result.boxes.conf.cpu().numpy()
+                class_ids = result.boxes.cls.cpu().numpy().astype(int)
 
-            for box, conf, class_id in zip(boxes_xyxy, confidences, class_ids):
-                brand = get_brand_name(class_id, model.names)
-                if brand not in {"Adidas", "Puma"}:
-                    continue
+                for box, conf, class_id in zip(boxes_xyxy, confidences, class_ids):
+                    brand = get_brand_name(class_id, model.names)
+                    if brand not in {"Adidas", "Puma"}:
+                        continue
 
-                x1, y1, x2, y2 = box
-                x1 = max(0, min(width - 1, int(round(x1))))
-                y1 = max(0, min(height - 1, int(round(y1))))
-                x2 = max(0, min(width - 1, int(round(x2))))
-                y2 = max(0, min(height - 1, int(round(y2))))
+                    x1, y1, x2, y2 = box
+                    x1 = max(0, min(width - 1, int(round(x1))))
+                    y1 = max(0, min(height - 1, int(round(y1))))
+                    x2 = max(0, min(width - 1, int(round(x2))))
+                    y2 = max(0, min(height - 1, int(round(y2))))
 
-                box_width = x2 - x1
-                box_height = y2 - y1
-                if box_width <= 0 or box_height <= 0:
-                    continue
+                    box_width = x2 - x1
+                    box_height = y2 - y1
+                    if box_width <= 0 or box_height <= 0:
+                        continue
 
-                draw_detection(frame, brand, float(conf), x1, y1, x2, y2)
+                    draw_detection(frame, brand, float(conf), x1, y1, x2, y2)
 
-                row = {
-                    "frame_index": frame_index,
-                    "timestamp_sec": round(timestamp_sec, 3),
-                    "brand": brand,
-                    "confidence": round(float(conf), 6),
-                    "x1": x1,
-                    "y1": y1,
-                    "x2": x2,
-                    "y2": y2,
-                    "box_width": box_width,
-                    "box_height": box_height,
-                    "video_path": str(video_path),
-                }
-                csv_writer.writerow(row)
-                if sqlite_db_path is not None:
-                    sqlite_detections.append(row)
-                detection_count += 1
+                    row = {
+                        "frame_index": frame_index,
+                        "timestamp_sec": round(timestamp_sec, 3),
+                        "brand": brand,
+                        "confidence": round(float(conf), 6),
+                        "x1": x1,
+                        "y1": y1,
+                        "x2": x2,
+                        "y2": y2,
+                        "box_width": box_width,
+                        "box_height": box_height,
+                        "video_path": str(video_path),
+                    }
+                    csv_writer.writerow(row)
+                    if sqlite_db_path is not None:
+                        sqlite_detections.append(row)
+                    detection_count += 1
 
-        writer.write(frame)
-        frame_index += 1
+            writer.write(frame)
+            frame_index += 1
 
-        if frame_index % 100 == 0:
-            print(f"Processed {frame_index}/{total_frames} frames... detections: {detection_count}")
+            if frame_index % 100 == 0:
+                print(
+                    f"Processed {frame_index}/{total_frames} frames... detections: {detection_count}"
+                )
 
-        if progress_callback and (frame_index % 25 == 0 or frame_index == total_frames):
-            progress_callback(frame_index, total_frames, detection_count)
+            if progress_callback and (frame_index % 25 == 0 or frame_index == total_frames):
+                progress_callback(frame_index, total_frames, detection_count)
+    except Exception:
+        inference_status = "failed"
+        raise
+    finally:
+        cap.release()
+        writer.release()
+        csv_file.close()
 
-    cap.release()
-    writer.release()
-    csv_file.close()
+        if sqlite_db_path is not None and db_run_id is not None:
+            add_detections(
+                sqlite_db_path,
+                run_id=db_run_id,
+                detections=sqlite_detections,
+            )
+            finalize_inference_run(
+                sqlite_db_path,
+                run_id=db_run_id,
+                output_video_path=str(output_video_path),
+                csv_path=str(output_csv_path),
+                total_detections=detection_count,
+                finished_at=utc_now_iso(),
+                status=inference_status,
+            )
 
-    print("\nDone.")
-    print(f"Annotated video: {output_video_path}")
-    print(f"CSV file:        {output_csv_path}")
-    print(f"Total detections: {detection_count}")
+        print("\nDone.")
+        print(f"Annotated video: {output_video_path}")
+        print(f"CSV file:        {output_csv_path}")
+        print(f"Total detections: {detection_count}")
+        if sqlite_db_path is not None:
+            print(f"SQLite database:  {sqlite_db_path}")
 
-    if sqlite_db_path is not None:
-        store_detections_to_sqlite(
-            db_path=sqlite_db_path,
-            table_name=sqlite_table,
-            run_id=run_id,
-            output_video_path=output_video_path,
-            output_csv_path=output_csv_path,
-            detections=sqlite_detections,
-        )
-        print(f"SQLite database:  {sqlite_db_path}")
-
-    return output_video_path, output_csv_path, detection_count, video_path
+    return output_video_path, output_csv_path, detection_count, video_path, db_run_id
