@@ -1,0 +1,9 @@
+*.pt
+*__pycache__/
+*cpython-310.pyc
+datasets/
+*jpg
+*jpeg
+*png
+*.DS_Store
+outputs/
