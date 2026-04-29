@@ -110,7 +110,6 @@ def main() -> None:
                 placeholder="outputs/streamlit_runs/video_detections.sqlite3",
                 help="Local SQLite file used to store detection rows.",
             ).strip()
-            st.caption("SQLite writes are local and do not require network access.")
 
     if run_clicked:
         run_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
@@ -193,16 +192,14 @@ def main() -> None:
         st.video(video_bytes, format="video/mp4")
         st.caption(f"Saved to {output_video_path}")
 
-        with st.expander("Run details", expanded=False):
-            cols = st.columns(3)
-            cols[0].metric("Detections", result["detection_count"])
-            cols[1].metric("Run folder", str(result["run_dir"]))
-            cols[2].metric("Input", str(result["input_video_path"]))
-
-            if result.get("sqlite_enabled"):
-                st.info(
-                    f"Detections were also written to SQLite table `{result['sqlite_table']}` in `{result['sqlite_db_path']}`."
-                )
+        csv_bytes = Path(result["output_csv_path"]).read_bytes()
+        st.download_button(
+            "Export CSV",
+            data=csv_bytes,
+            file_name=Path(result["output_csv_path"]).name,
+            mime="text/csv",
+            use_container_width=True,
+        )
 
 
 if __name__ == "__main__":

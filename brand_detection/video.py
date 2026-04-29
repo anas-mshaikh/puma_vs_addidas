@@ -90,6 +90,31 @@ def draw_detection(frame, brand: str, conf: float, x1: int, y1: int, x2: int, y2
     )
 
 
+def create_video_writer(output_path: Path, fps: float, width: int, height: int) -> cv2.VideoWriter:
+    candidates = ["avc1", "H264", "mp4v"]
+    last_writer = None
+
+    for codec in candidates:
+        writer = cv2.VideoWriter(
+            str(output_path),
+            cv2.VideoWriter_fourcc(*codec),
+            fps,
+            (width, height),
+        )
+        if writer.isOpened():
+            print(f"Using video codec: {codec}")
+            return writer
+
+        last_writer = writer
+
+    if last_writer is not None:
+        last_writer.release()
+
+    raise RuntimeError(
+        f"Could not create a video writer for {output_path}. Tried codecs: {', '.join(candidates)}"
+    )
+
+
 def run_video_inference(
     weights: Path,
     source: str,
@@ -136,8 +161,7 @@ def run_video_inference(
     output_video_path = out_dir / f"labeled_logo_video_{run_id}.mp4"
     output_csv_path = out_dir / f"detections_{run_id}.csv"
 
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    writer = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
+    writer = create_video_writer(output_video_path, fps, width, height)
 
     csv_file = output_csv_path.open("w", newline="", encoding="utf-8")
     csv_writer = csv.DictWriter(
