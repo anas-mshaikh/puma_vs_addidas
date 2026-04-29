@@ -1,4 +1,4 @@
-from brand_detection.web import main
+from brand_detection.cli import main
 
 
 if __name__ == "__main__":

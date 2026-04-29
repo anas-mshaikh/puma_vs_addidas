@@ -1,0 +1,5 @@
+opencv-python
+psycopg[binary]
+streamlit
+ultralytics
+yt-dlp

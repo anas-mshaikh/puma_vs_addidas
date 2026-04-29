@@ -33,13 +33,6 @@ def normalize_name(name: str) -> str:
 
 
 def map_to_brand(class_name: str) -> Optional[str]:
-    """
-    Maps dataset-specific class names to canonical classes.
-
-    Examples:
-    Adidas, adidas, adidas_text, adidas-logo -> adidas
-    Puma, puma, puma_text, puma-logo -> puma
-    """
     s = normalize_name(class_name)
 
     adidas_aliases = [
@@ -91,12 +84,6 @@ def find_dataset_roots(raw_root: Path) -> List[Path]:
 
 
 def find_split_dirs(dataset_root: Path) -> List[Tuple[str, Path, Path]]:
-    """
-    Supports common Roboflow structure:
-      train/images + train/labels
-      valid/images + valid/labels
-      test/images + test/labels
-    """
     split_names = ["train", "valid", "val", "test"]
     found = []
 
@@ -152,7 +139,6 @@ def parse_and_filter_label_file(
             stats["non_target_box"] += 1
             continue
 
-        # YOLO detection format expects normalized xywh values.
         if not (
             0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 and 0.0 < w <= 1.0 and 0.0 < h <= 1.0
         ):
@@ -169,12 +155,6 @@ def parse_and_filter_label_file(
 def split_records(
     records: List[dict], train_ratio: float, valid_ratio: float, seed: int
 ) -> Dict[str, List[dict]]:
-    """
-    Lightweight stratification by dominant class:
-    - adidas-only
-    - puma-only
-    - mixed
-    """
     random.seed(seed)
 
     groups = defaultdict(list)
@@ -198,7 +178,6 @@ def split_records(
         n_train = int(n * train_ratio)
         n_valid = int(n * valid_ratio)
 
-        # Keep tiny groups mostly in train.
         if n >= 10:
             n_train = max(1, n_train)
             n_valid = max(1, n_valid)
@@ -252,9 +231,7 @@ def main() -> None:
         required=True,
         help="Folder containing all downloaded Roboflow datasets",
     )
-    parser.add_argument(
-        "--out", required=True, help="Output folder for cleaned Adidas/Puma dataset"
-    )
+    parser.add_argument("--out", required=True, help="Output folder for cleaned Adidas/Puma dataset")
     parser.add_argument("--train", type=float, default=0.80)
     parser.add_argument("--valid", type=float, default=0.10)
     parser.add_argument("--seed", type=int, default=42)
@@ -270,9 +247,7 @@ def main() -> None:
         raise FileNotFoundError(f"Raw root not found: {raw_root}")
 
     if args.train + args.valid >= 1.0:
-        raise ValueError(
-            "--train + --valid must be less than 1.0 so test split can exist"
-        )
+        raise ValueError("--train + --valid must be less than 1.0 so test split can exist")
 
     dataset_roots = find_dataset_roots(raw_root)
 
@@ -310,7 +285,7 @@ def main() -> None:
 
         split_dirs = find_split_dirs(dataset_root)
         if not split_dirs:
-            print(f"  Warning: no train/valid/test image+label folders found")
+            print("  Warning: no train/valid/test image+label folders found")
             continue
 
         for source_split, image_dir, label_dir in split_dirs:
@@ -353,9 +328,7 @@ def main() -> None:
                 )
 
     if not all_records:
-        raise RuntimeError(
-            "No Adidas/Puma images found. Check class names in data.yaml files."
-        )
+        raise RuntimeError("No Adidas/Puma images found. Check class names in data.yaml files.")
 
     split_map = split_records(
         records=all_records,
